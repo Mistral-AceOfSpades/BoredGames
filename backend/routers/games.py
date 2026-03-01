@@ -15,7 +15,6 @@ from backend.models.game import (
     GameCreate,
     GameDB,
     GameResponse,
-    GameSchema,
     GameSessionDB,
     SessionCreate,
 )

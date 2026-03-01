@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import logging
+import re
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -15,8 +15,6 @@ from backend.services.ocr_service import process_rulebook_image, process_ruleboo
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ocr", tags=["ocr"])
-
-import re
 
 
 def _slugify(name: str) -> str:
