@@ -75,6 +75,10 @@ async def resolve_dispute(
     if safety.get("flagged"):
         return {
             "resolution": "Your dispute description was flagged for inappropriate content. Please rephrase.",
+            "citations": [],
+            "interpretation_level": "safety",
+            "confidence": "low",
+            "alternative_interpretations": [],
             "flagged": True,
         }
 
@@ -121,6 +125,7 @@ async def resolve_dispute(
             "citations": [],
             "interpretation_level": "unknown",
             "confidence": "medium",
+            "alternative_interpretations": [],
             "flagged": False,
         }
 

@@ -21,8 +21,14 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  // Don't set Content-Type for FormData (browser sets multipart boundary)
-  if (!(options.body instanceof FormData)) {
+  if (!headers.Accept) {
+    headers.Accept = 'application/json';
+  }
+
+  // Only set JSON content type when a JSON string body is sent.
+  // (Avoid forcing preflights for body-less GET requests.)
+  const hasJsonStringBody = typeof options.body === 'string';
+  if (hasJsonStringBody && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
 
@@ -36,7 +42,16 @@ async function request<T>(
     throw new Error(body.detail || `Request failed: ${res.status}`);
   }
 
-  return res.json();
+  if (res.status === 204) {
+    return undefined as T;
+  }
+
+  const text = await res.text();
+  if (!text) {
+    return undefined as T;
+  }
+
+  return JSON.parse(text) as T;
 }
 
 // ---------- Auth ----------

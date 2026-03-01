@@ -9,8 +9,11 @@ import { ExplainPage } from './pages/Explain';
 import { ModeratePage } from './pages/Moderate';
 
 export default function App() {
+  const baseUrl = import.meta.env.BASE_URL || '/';
+  const basename = baseUrl === '/' ? '/' : baseUrl.replace(/\/$/, '');
+
   return (
-    <BrowserRouter basename="/BoredGames">
+    <BrowserRouter basename={basename}>
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />

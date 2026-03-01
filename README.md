@@ -53,7 +53,10 @@ backend/           FastAPI + SQLAlchemy + Mistral SDK
 git clone https://github.com/Mistral-AceOfSpades/BoredGames.git
 cd BoredGames
 cp .env.example .env
-# Edit .env and set your MISTRAL_API_KEY
+# Edit .env and set at minimum:
+#   - MISTRAL_API_KEY=your_mistral_api_key
+#   - SECRET_KEY=a long random string (do NOT leave the default placeholder)
+# and any other required values for your environment.
 ```
 
 ### 2. Backend

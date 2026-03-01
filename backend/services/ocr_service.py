@@ -32,6 +32,15 @@ Rules:
 Return ONLY valid JSON, no markdown fences.""".format(schema=json.dumps(GAME_SCHEMA_JSON, indent=2))
 
 
+def _fallback_schema(name: str = "Unknown Game", raw_text: str | None = None) -> dict:
+    summary = "Rulebook text was extracted but could not be fully structured automatically."
+    if raw_text:
+        snippet = " ".join(raw_text.split())[:220]
+        if snippet:
+            summary = f"{summary} OCR excerpt: {snippet}"
+    return GameSchema(name=name, summary=summary).model_dump()
+
+
 async def process_rulebook_image(image_data: bytes, content_type: str = "image/png") -> dict[str, Any]:
     """Full pipeline: image → OCR → structured game schema."""
 
@@ -96,12 +105,17 @@ async def structure_rules(raw_text: str) -> dict:
 
     try:
         parsed = json.loads(result)
-        # Validate against schema
-        schema = GameSchema(**parsed)
+    except json.JSONDecodeError:
+        logger.warning("Failed to parse structured rules JSON")
+        return _fallback_schema(raw_text=raw_text)
+
+    if isinstance(parsed, dict) and not parsed.get("name"):
+        parsed["name"] = "Unknown Game"
+
+    try:
+        schema = GameSchema.model_validate(parsed)
         return schema.model_dump()
     except Exception:
-        logger.warning("Failed to parse structured rules, returning raw JSON")
-        try:
-            return json.loads(result)
-        except json.JSONDecodeError:
-            return {"raw_output": result}
+        logger.warning("Structured rules did not match schema, returning fallback schema")
+        fallback_name = parsed.get("name", "Unknown Game") if isinstance(parsed, dict) else "Unknown Game"
+        return _fallback_schema(name=fallback_name, raw_text=raw_text)

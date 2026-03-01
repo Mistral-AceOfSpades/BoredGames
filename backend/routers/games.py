@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,10 +16,11 @@ from backend.models.game import (
     GameCreate,
     GameDB,
     GameResponse,
+    GameSchema,
     GameSessionDB,
     SessionCreate,
 )
-from backend.services.search_service import search_game_by_name
+from backend.services.search_service import GameSearchError, search_game_by_name
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/games", tags=["games"])
@@ -27,6 +29,16 @@ router = APIRouter(prefix="/games", tags=["games"])
 def _slugify(name: str) -> str:
     slug = re.sub(r"[^\w\s-]", "", name.lower())
     return re.sub(r"[\s_]+", "-", slug).strip("-")
+
+
+def _coerce_structured_rules(raw: Any) -> dict | None:
+    if raw is None:
+        return None
+    try:
+        return GameSchema.model_validate(raw).model_dump()
+    except Exception:
+        logger.warning("Ignoring invalid structured_rules payload")
+        return None
 
 
 @router.post("", response_model=GameResponse)
@@ -38,25 +50,38 @@ async def create_game(body: GameCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(GameDB).where(GameDB.slug == slug))
     existing = result.scalar_one_or_none()
     if existing:
+        structured_rules = _coerce_structured_rules(existing.structured_rules)
         return GameResponse(
             id=existing.id,
             name=existing.name,
             slug=existing.slug,
             source=existing.source or "search",
-            structured_rules=existing.structured_rules,
+            structured_rules=structured_rules,
             house_rules=existing.house_rules or [],
             created_at=existing.created_at,
         )
 
     # Search for the game rules
-    search_result = await search_game_by_name(body.name)
+    try:
+        search_result = await search_game_by_name(body.name)
+    except GameSearchError as exc:
+        logger.warning("Game search failed for '%s': %s", body.name, exc.detail)
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except Exception as exc:
+        logger.exception("Unexpected error while searching for game '%s'", body.name)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to search for game rules. Please try again later.",
+        ) from exc
+
+    structured_rules = _coerce_structured_rules(search_result.get("structured_rules"))
 
     game = GameDB(
         id=str(uuid4()),
         name=body.name,
         slug=slug,
         source="search",
-        structured_rules=search_result.get("structured_rules"),
+        structured_rules=structured_rules,
         house_rules=[],
         metadata_={},
     )
@@ -69,7 +94,7 @@ async def create_game(body: GameCreate, db: AsyncSession = Depends(get_db)):
         name=game.name,
         slug=game.slug,
         source=game.source,
-        structured_rules=game.structured_rules,
+        structured_rules=structured_rules,
         house_rules=[],
         created_at=game.created_at,
     )
@@ -86,7 +111,7 @@ async def list_games(db: AsyncSession = Depends(get_db)):
             name=g.name,
             slug=g.slug,
             source=g.source or "search",
-            structured_rules=g.structured_rules,
+            structured_rules=_coerce_structured_rules(g.structured_rules),
             house_rules=g.house_rules or [],
             created_at=g.created_at,
         )
@@ -106,7 +131,7 @@ async def get_game(game_id: str, db: AsyncSession = Depends(get_db)):
         name=game.name,
         slug=game.slug,
         source=game.source or "search",
-        structured_rules=game.structured_rules,
+        structured_rules=_coerce_structured_rules(game.structured_rules),
         house_rules=game.house_rules or [],
         created_at=game.created_at,
     )
