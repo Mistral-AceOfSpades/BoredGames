@@ -10,8 +10,10 @@ class Settings(BaseSettings):
 
     # App
     app_name: str = "BoredGames API"
-    debug: bool = True
-    secret_key: str = "dev-secret-change-in-production"
+    debug: bool = False
+    secret_key: str
+    enable_dev_token: bool = False
+    oauth_state_ttl_seconds: int = 600
     allowed_origins: list[str] = [
         "http://localhost:5173",
         "http://localhost:4173",
@@ -60,6 +62,10 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        if self.secret_key in {"change-me-in-production", "dev-secret-change-in-production"}:
+            raise ValueError("SECRET_KEY must be set to a non-placeholder value")
+
         # Map the .env key name to our field
         if not self.mistral_api_key:
             from dotenv import dotenv_values

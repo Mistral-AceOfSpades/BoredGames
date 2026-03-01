@@ -44,7 +44,13 @@ async function request<T>(
 export const api = {
   auth: {
     githubUrl: () => request<{ url: string }>('/auth/github'),
-    callback: (code: string) => request<import('../types').AuthResponse>(`/auth/github/callback?code=${code}`),
+    callback: (code: string, state?: string) => {
+      const query = new URLSearchParams({ code });
+      if (state) {
+        query.set('state', state);
+      }
+      return request<import('../types').AuthResponse>(`/auth/github/callback?${query.toString()}`);
+    },
     me: () => request<import('../types').User>('/auth/me'),
     devToken: () => request<import('../types').AuthResponse>('/auth/dev-token', { method: 'POST' }),
   },

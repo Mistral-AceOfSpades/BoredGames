@@ -55,7 +55,13 @@ async def validate_move(
     try:
         return json.loads(result)
     except json.JSONDecodeError:
-        return {"valid": True, "reason": "Could not validate move", "rule_reference": "", "suggestion": None}
+        logger.warning("validate_move: received malformed JSON from chat_completion: %r", result)
+        return {
+            "valid": False,
+            "reason": "Could not validate move (malformed validator response)",
+            "rule_reference": "",
+            "suggestion": None,
+        }
 
 
 async def resolve_dispute(

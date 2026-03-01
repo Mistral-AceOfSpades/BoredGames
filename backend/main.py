@@ -68,10 +68,22 @@ async def health():
 @app.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
     await manager.connect(websocket, session_id)
+    disconnected = False
     try:
         while True:
             data = await websocket.receive_text()
-            message = json.loads(data)
+            try:
+                message = json.loads(data)
+            except json.JSONDecodeError:
+                await manager.send_personal(
+                    websocket,
+                    {
+                        "type": "error",
+                        "content": "Invalid JSON payload",
+                    },
+                )
+                continue
+
             event_type = message.get("type", "chat")
 
             if event_type == "chat":
@@ -92,10 +104,23 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     websocket,
                     {"type": "voice_ack", "status": "received"},
                 )
+            else:
+                await manager.send_personal(
+                    websocket,
+                    {
+                        "type": "error",
+                        "content": f"Unknown event type: {event_type}",
+                    },
+                )
 
     except WebSocketDisconnect:
+        disconnected = True
+    except Exception:
+        logger.exception("Unexpected WebSocket error for session %s", session_id)
+    finally:
         manager.disconnect(websocket, session_id)
-        await manager.send_to_session(
-            session_id,
-            {"type": "system", "content": "A player disconnected"},
-        )
+        if disconnected:
+            await manager.send_to_session(
+                session_id,
+                {"type": "system", "content": "A player disconnected"},
+            )

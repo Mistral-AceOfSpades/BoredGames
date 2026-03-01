@@ -158,6 +158,7 @@ async def create_session(
         "players": session.players,
         "status": session.status,
         "current_turn": session.current_turn,
+        "turn_order": session.turn_order,
         "game_state": session.game_state,
     }
 

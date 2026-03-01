@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models.game import GameDB, GameResponse
-from backend.services.ocr_service import process_rulebook_image, process_rulebook_url
+from backend.services.ocr_service import process_rulebook_image, process_rulebook_pdf, process_rulebook_url
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ocr", tags=["ocr"])
@@ -33,11 +33,14 @@ async def upload_rulebook(
     ):
         raise HTTPException(status_code=400, detail="File must be an image or PDF")
 
-    image_data = await file.read()
-    if len(image_data) > 20 * 1024 * 1024:  # 20 MB limit
+    file_data = await file.read()
+    if len(file_data) > 20 * 1024 * 1024:  # 20 MB limit
         raise HTTPException(status_code=400, detail="File too large (max 20MB)")
 
-    result = await process_rulebook_image(image_data, file.content_type)
+    if file.content_type == "application/pdf":
+        result = await process_rulebook_pdf(file_data)
+    else:
+        result = await process_rulebook_image(file_data, file.content_type)
 
     structured = result.get("structured_rules", {})
     game_name = structured.get("name", file.filename or "Unknown Game")

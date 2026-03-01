@@ -1,4 +1,4 @@
-"""OCR service — extracts and structures rulebook content from uploaded images."""
+"""OCR service — extracts and structures rulebook content from uploaded images and PDFs."""
 
 from __future__ import annotations
 
@@ -46,6 +46,23 @@ async def process_rulebook_image(image_data: bytes, content_type: str = "image/p
     # Step 3: Structure the rules
     structured = await structure_rules(raw_text)
 
+    return {
+        "raw_text": raw_text,
+        "structured_rules": structured,
+    }
+
+
+async def process_rulebook_pdf(pdf_data: bytes) -> dict[str, Any]:
+    """Full pipeline: PDF bytes → OCR → structured game schema."""
+
+    # Use a document data URL to route through document OCR ingestion.
+    b64 = base64.b64encode(pdf_data).decode("utf-8")
+    document_url = f"data:application/pdf;base64,{b64}"
+
+    raw_text = await ocr_extract(document_url=document_url)
+    logger.info("OCR extracted %d characters from PDF upload", len(raw_text))
+
+    structured = await structure_rules(raw_text)
     return {
         "raw_text": raw_text,
         "structured_rules": structured,

@@ -63,11 +63,19 @@ async def validate_house_rule(structured_rules: dict, house_rule_description: st
     try:
         return json.loads(result)
     except json.JSONDecodeError:
+        logger.warning("validate_house_rule: received malformed JSON from chat_completion: %r", result)
         return {
             "contradiction": False,
+            "contradiction_reason": None,
+            "impacted_rules": [],
+            "balance_impact": "none",
+            "length_impact": "unchanged",
+            "complexity_impact": "unchanged",
+            "logical_issues": [],
+            "recommendation": "modify",
+            "recommendation_reason": "Could not parse structured analysis. Please review this rule manually.",
+            "suggested_modification": None,
             "raw_analysis": result,
-            "recommendation": "review",
-            "recommendation_reason": "Could not parse structured analysis",
         }
 
 

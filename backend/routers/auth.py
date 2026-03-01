@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import logging
+import secrets
+import time
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,6 +23,27 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 security = HTTPBearer(auto_error=False)
 settings = get_settings()
+oauth_state_store: dict[str, float] = {}
+
+
+def _cleanup_expired_oauth_states(now: float | None = None) -> None:
+    now_ts = now if now is not None else time.time()
+    expired = [state for state, expires_at in oauth_state_store.items() if expires_at <= now_ts]
+    for state in expired:
+        oauth_state_store.pop(state, None)
+
+
+def _create_oauth_state() -> str:
+    _cleanup_expired_oauth_states()
+    state = secrets.token_urlsafe(32)
+    oauth_state_store[state] = time.time() + settings.oauth_state_ttl_seconds
+    return state
+
+
+def _consume_oauth_state(state: str) -> bool:
+    _cleanup_expired_oauth_states()
+    expires_at = oauth_state_store.pop(state, None)
+    return bool(expires_at and expires_at > time.time())
 
 
 def create_jwt(user_id: str) -> str:
@@ -64,19 +88,27 @@ async def github_login():
     """Return the GitHub OAuth URL for the frontend to redirect to."""
     if not settings.github_client_id:
         raise HTTPException(status_code=501, detail="GitHub OAuth not configured")
-    url = (
-        f"https://github.com/login/oauth/authorize"
-        f"?client_id={settings.github_client_id}"
-        f"&scope=read:user"
+
+    state = _create_oauth_state()
+    query = urlencode(
+        {
+            "client_id": settings.github_client_id,
+            "scope": "read:user",
+            "state": state,
+        }
     )
+    url = f"https://github.com/login/oauth/authorize?{query}"
     return {"url": url}
 
 
 @router.get("/github/callback")
-async def github_callback(code: str, db: AsyncSession = Depends(get_db)):
+async def github_callback(code: str, state: str | None = None, db: AsyncSession = Depends(get_db)):
     """Exchange GitHub OAuth code for a JWT."""
     if not settings.github_client_id or not settings.github_client_secret:
         raise HTTPException(status_code=501, detail="GitHub OAuth not configured")
+
+    if not state or not _consume_oauth_state(state):
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
 
     # Exchange code for access token
     async with httpx.AsyncClient() as client:
@@ -141,7 +173,7 @@ async def get_me(user: UserDB = Depends(require_user)):
 @router.post("/dev-token", response_model=TokenResponse)
 async def dev_token(db: AsyncSession = Depends(get_db)):
     """Development-only endpoint — creates a test user and returns a JWT."""
-    if not settings.debug:
+    if not (settings.debug and settings.enable_dev_token):
         raise HTTPException(status_code=404)
 
     result = await db.execute(select(UserDB).where(UserDB.github_id == "dev-user"))
